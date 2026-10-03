@@ -1,0 +1,12 @@
+.env
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+.venv/
+dist/
+build/
+node_modules/
+test-results/
+playwright-report/
