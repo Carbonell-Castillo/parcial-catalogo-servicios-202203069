@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Catálogo de Servicios</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <section id="login" class="card login">
+      <h1>Catálogo de Servicios</h1>
+      <p class="muted">Autenticación local</p>
+      <form id="loginForm">
+        <label for="loginInput">Usuario o correo</label
+        ><input id="loginInput" name="login" autocomplete="username" required />
+        <label for="passwordInput">Contraseña</label
+        ><input
+          id="passwordInput"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+        <p><button>Iniciar sesión</button></p>
+      </form>
+      <div id="loginMsg"></div>
+    </section>
+    <main id="app" class="hidden">
+      <header>
+        <h1>Catálogo de Servicios TI</h1>
+        <span
+          ><b id="who"></b> ·
+          <button id="logout" class="secondary">Salir</button></span
+        >
+      </header>
+      <div class="shell">
+        <nav id="nav">
+          <button data-view="services">Servicios</button
+          ><button data-view="org" class="admin">Organización</button
+          ><button data-view="users" class="admin">Usuarios</button
+          ><button data-view="catalogs" class="admin">Catálogos</button
+          ><button data-view="imports">Importaciones</button>
+        </nav>
+        <div id="msg"></div>
+        <section id="content"></section>
+      </div>
+    </main>
+    <dialog id="modal" aria-labelledby="modalTitle">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2 id="modalTitle"></h2>
+          <button id="modalClose" type="button" class="secondary modal-close" aria-label="Cerrar">×</button>
+        </div>
+        <div id="modalMessage"></div>
+        <div id="modalBody"></div>
+      </div>
+    </dialog>
+    <script>
+      let me = null,
+        csrf = "",
+        state = { page: 1 };
+      const $ = (s) => document.querySelector(s),
+        esc = (s) =>
+          String(s ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      async function api(url, opt = {}) {
+        opt.headers = {
+          ...(opt.body ? { "Content-Type": "application/json" } : {}),
+          ...(opt.method && opt.method !== "GET"
+            ? { "X-CSRF-Token": csrf }
+            : {}),
+          ...opt.headers,
+        };
+        let r = await fetch(url, opt);
+        let data = await r.json().catch(() => ({ detail: r.statusText }));
+        if (!r.ok)
+          throw Error(
+            Array.isArray(data.detail)
+              ? data.detail.map((x) => x.msg).join(", ")
+              : data.detail || "Error",
+          );
+        return data;
+      }
+      function message(t, ok = false) {
+        $("#msg").innerHTML = t
+          ? `<p class="${ok ? "success" : "error"}">${esc(t)}</p>`
+            : "";
+      }
+      function modalMessage(t, ok = false) {
+        $("#modalMessage").innerHTML = t
+          ? `<p class="${ok ? "success" : "error"}">${esc(t)}</p>`
+          : "";
+      }
+      function openModal(title, body) {
+        $("#modalTitle").textContent = title;
+        $("#modalBody").innerHTML = body;
+        modalMessage("");
+        if (!$("#modal").open) $("#modal").showModal();
+      }
+      function closeModal() {
+        if ($("#modal").open) $("#modal").close();
+        $("#modalBody").innerHTML = "";
+        modalMessage("");
+      }
+      $("#modalClose").onclick = closeModal;
+      $("#modal").onclick = (event) => {
+        if (event.target === $("#modal")) closeModal();
+      };
+      $("#loginForm").onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          me = await api("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify(Object.fromEntries(new FormData(e.target))),
+          });
+          start();
+        } catch (x) {
+          $("#loginMsg").innerHTML = `<p class="error">${esc(x.message)}</p>`;
+        }
+      };
+      async function session() {
+        try {
+          me = await api("/api/me");
+          start();
+        } catch {}
+      }
+      function start() {
+        csrf = me.csrf;
+        $("#login").classList.add("hidden");
+        $("#app").classList.remove("hidden");
+        $("#who").textContent = `${me.nombre} (${me.rol})`;
+        document
+          .querySelectorAll(".admin")
+          .forEach((x) =>
+            x.classList.toggle("hidden", me.rol !== "administrador"),
+          );
+        show("services");
+      }
+      $("#logout").onclick = async () => {
+        await api("/api/auth/logout", { method: "POST" });
+        location.reload();
+      };
+      $("#nav").onclick = (e) => {
+        if (e.target.dataset.view) show(e.target.dataset.view);
+      };
+      async function show(view) {
+        message("");
+        document
+          .querySelectorAll("nav button")
+          .forEach((x) =>
+            x.classList.toggle("active", x.dataset.view === view),
+          );
+        $("#content").innerHTML = '<div class="card"><p>Cargando…</p></div>';
+        try {
+          await (({ services, org, users, catalogs, imports })[view] || services)();
+        } catch (error) {
+          message(error.message || "No fue posible cargar la sección");
+          $("#content").innerHTML = '<div class="card"><p>No fue posible cargar los datos.</p></div>';
+        }
+      }
+      async function services() {
+        let [data, n1, cl, cr, ty] = await Promise.all([
+          api(`/api/servicios?page=${state.page}&size=15&${state.query || ""}`),
+          api("/api/servicios/nivel1"),
+          api("/api/catalogos/clases"),
+          api("/api/catalogos/criticidades"),
+          api("/api/catalogos/tipos"),
+        ]);
+        let options = (a) =>
+          '<option value="">—</option>' +
+          a
+            .map(
+              (x) =>
+                `<option value="${x.id}">${esc(x.codigo)} · ${esc(x.nombre)}</option>`,
+            )
+            .join("");
+        $("#content").innerHTML =
+          `<div class="card"><h2>Servicios</h2><form id="filter" class="grid"><div><label>Código o nombre</label><input name="q"></div><div><label>Nivel 1</label><select name="nivel1_id">${options(n1)}</select></div><div><label>Clase</label><select name="clase_id">${options(cl)}</select></div><div><label>Criticidad</label><select name="criticidad_id">${options(cr)}</select></div><div><label>Tipo</label><select name="tipo_id">${options(ty)}</select></div><div class="actions"><button>Buscar</button>${me.rol === "administrador" ? '<button type="button" id="newSvc">Nuevo</button>' : ""}</div></form></div><div class="card"><p>${data.total} resultados · página ${data.page}/${data.pages || 1}</p><table><thead><tr><th>Código</th><th>Nombre</th><th>Nivel 1</th><th>Clase</th><th>Estado</th><th></th></tr></thead><tbody>${data.items.map((x) => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td><td>${esc(x.nivel1)}</td><td>${esc(x.clase || "Desconocida")}</td><td><span class="badge">${x.activo ? "Activo" : "Inactivo"}</span></td><td><button class="secondary detail" data-id="${x.id}">Ver</button></td></tr>`).join("")}</tbody></table><p class="actions"><button id="prev" ${data.page <= 1 ? "disabled" : ""}>Anterior</button><button id="next" ${data.page >= data.pages ? "disabled" : ""}>Siguiente</button></p></div>`;
+        const statusFilter = document.createElement("div");
+        statusFilter.innerHTML = '<label>Estado</label><select name="activo"><option value="true">Activos</option><option value="false">Inactivos</option></select>';
+        $("#filter").insertBefore(statusFilter, $("#filter").lastElementChild);
+        $("#filter").onsubmit = (e) => {
+          e.preventDefault();
+          state.page = 1;
+          const params = new URLSearchParams();
+          for (const [key, value] of new FormData(e.target).entries()) {
+            if (String(value).trim() !== "") params.set(key, value);
+          }
+          state.query = params.toString();
+          services();
+        };
+        $("#prev").onclick = () => {
+          state.page--;
+          services();
+        };
+        $("#next").onclick = () => {
+          state.page++;
+          services();
+        };
+        document
+          .querySelectorAll(".detail")
+          .forEach((b) => (b.onclick = () => serviceDetail(b.dataset.id)));
+        if ($("#newSvc"))
+          $("#newSvc").onclick = () => serviceForm(null, { n1, cl, cr, ty });
+      }
+      async function serviceDetail(id) {
+        let x = await api("/api/servicios/" + id);
+        $("#content").innerHTML =
+          `<div class="card"><h2>${esc(x.codigo)} · ${esc(x.nombre)}</h2><p><b>Nivel 1:</b> ${esc(x.nivel1)}</p><div class="grid"><p><b>Activo Excel:</b> ${esc(x.indicador_activo_excel || "Desconocido")}</p><p><b>Clase:</b> ${esc(x.clase || "Desconocida")}</p><p><b>Criticidad:</b> ${esc(x.criticidad || "Desconocida")}</p><p><b>Tipo:</b> ${esc(x.tipo || "Desconocido")}</p><p><b>Métrica:</b> ${esc(x.metrica || "Desconocida")}</p><p><b>Rango:</b> ${esc(x.minimo ?? "—")} – ${esc(x.maximo ?? "—")}</p><p><b>Revisión:</b> ${esc(x.estado_revision)}</p></div><p>${esc(x.descripcion || "Sin descripción")}</p><div class="actions"><button id="backServices">Volver</button>${me.rol === "administrador" ? `<button id="edit">Editar</button><button id="toggle" class="danger">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</div></div>`;
+        $("#backServices").onclick = () => services();
+        if ($("#edit")) {
+          $("#edit").onclick = async () => serviceForm(x);
+          $("#toggle").onclick = async () => {
+            try {
+              await api("/api/servicios/" + x.id, {
+                method: "PATCH",
+                body: JSON.stringify({ activo: !x.activo }),
+              });
+              message("Estado actualizado", true);
+              services();
+            } catch (e) {
+              message(e.message);
+            }
+          };
+        }
+      }
+      async function serviceForm(x, lists) {
+        lists = lists || {
+          n1: await api("/api/servicios/nivel1"),
+          cl: await api("/api/catalogos/clases"),
+          cr: await api("/api/catalogos/criticidades"),
+          ty: await api("/api/catalogos/tipos"),
+        };
+        lists.sec = lists.sec || await api("/api/organizacion/secciones");
+        lists.us = lists.us || await api("/api/usuarios");
+        let opts = (a, v) =>
+          '<option value="">—</option>' +
+          a
+            .map(
+              (i) =>
+                `<option value="${i.id}" ${i.id === v ? "selected" : ""}>${esc(i.nombre)}</option>`,
+            )
+            .join("");
+        openModal(
+          x ? "Editar servicio" : "Nuevo servicio",
+          `<form id="svc" class="grid"><div><label>Código</label><input name="codigo" value="${esc(x?.codigo || "")}" required></div><div><label>Nombre</label><input name="nombre" value="${esc(x?.nombre || "")}" required></div><div><label>Nivel 1</label><select name="nivel1_id" required>${opts(lists.n1, x?.nivel1_id)}</select></div><div><label>Activo en Excel</label><input name="indicador_activo_excel" value="${esc(x?.indicador_activo_excel || "")}"></div><div><label>Clase</label><select name="clase_id">${opts(lists.cl, x?.clase_id)}</select></div><div><label>Criticidad</label><select name="criticidad_id">${opts(lists.cr, x?.criticidad_id)}</select></div><div><label>Tipo</label><select name="tipo_id">${opts(lists.ty, x?.tipo_id)}</select></div><div><label>Métrica</label><input name="metrica" value="${esc(x?.metrica || "")}"></div><div><label>Mínimo</label><input type="number" step="any" name="minimo" value="${esc(x?.minimo || "")}"></div><div><label>Máximo</label><input type="number" step="any" name="maximo" value="${esc(x?.maximo || "")}"></div><div><label>Estado revisión</label><select name="estado_revision"><option>completo</option><option ${x?.estado_revision === "pendiente" ? "selected" : ""}>pendiente</option></select></div><div><label>Descripción</label><textarea name="descripcion">${esc(x?.descripcion || "")}</textarea></div><div class="actions"><button>Guardar</button><button id="cancelService" type="button" class="secondary">Cancelar</button></div></form>`,
+        );
+        const assignment = document.createElement("div");
+        assignment.innerHTML = `<label>Sección responsable</label><select name="seccion_responsable_id">${opts(lists.sec, x?.seccion_responsable_id)}</select><label>Usuario responsable</label><select name="usuario_responsable_id">${opts(lists.us, x?.usuario_responsable_id)}</select>`;
+        $("#svc").insertBefore(assignment, $("#svc").lastElementChild);
+        $("#cancelService").onclick = closeModal;
+        $("#svc").onsubmit = async (e) => {
+          e.preventDefault();
+          let d = Object.fromEntries(new FormData(e.target));
+          ["nivel1_id", "clase_id", "criticidad_id", "tipo_id", "seccion_responsable_id", "usuario_responsable_id"].forEach(
+            (k) => (d[k] = d[k] ? +d[k] : null),
+          );
+          ["minimo", "maximo"].forEach(
+            (k) => (d[k] = d[k] === "" ? null : d[k]),
+          );
+          try {
+            await api(x ? "/api/servicios/" + x.id : "/api/servicios", {
+              method: x ? "PATCH" : "POST",
+              body: JSON.stringify(d),
+            });
+            closeModal();
+            message("Servicio guardado", true);
+            services();
+          } catch (er) {
+            modalMessage(er.message);
+          }
+        };
+      }
+      async function org() {
+        let kinds = [
+            "empresas",
+            "areas",
+            "departamentos",
+            "secciones",
+            "puestos",
+          ],
+          labels = [
+            "Empresas",
+            "Áreas",
+            "Departamentos",
+            "Secciones",
+            "Puestos",
+          ];
+        let all = {};
+        for (let k of kinds)
+          all[k] = await api(`/api/organizacion/${k}?include_inactive=true`);
+        $("#content").innerHTML =
+          `<div class="card"><h2>Organización</h2><label>Entidad</label><select id="kind">${kinds.map((k, i) => `<option value="${k}">${labels[i]}</option>`).join("")}</select></div><div id="orgbody"></div>`;
+        let render = () => {
+          let k = $("#kind").value,
+            i = kinds.indexOf(k),
+            parent = i ? all[kinds[i - 1]] : [];
+          $("#orgbody").innerHTML =
+            `<div class="card"><form id="orgform" class="grid"><div><label>Código</label><input name="codigo" required></div><div><label>Nombre</label><input name="nombre" required></div>${
+              i
+                ? `<div><label>Padre</label><select name="parent_id" required>${parent
+                    .filter((x) => x.activo)
+                    .map(
+                      (x) =>
+                        `<option value="${x.id}">${esc(x.codigo)} · ${esc(x.nombre)}</option>`,
+                    )
+                    .join("")}</select></div>`
+                : ""
+            }<div class="actions"><button>Crear</button></div></form><table><thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th></th></tr></thead><tbody>${all[k].map((x) => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td><td>${x.activo ? "Activo" : "Inactivo"}</td><td><button data-id="${x.id}" data-active="${x.activo}" class="toggle danger">${x.activo ? "Desactivar" : "Activar"}</button></td></tr>`).join("")}</tbody></table></div>`;
+          $("#orgform").onsubmit = async (e) => {
+            e.preventDefault();
+            let d = Object.fromEntries(new FormData(e.target));
+            if (d.parent_id) d.parent_id = +d.parent_id;
+            try {
+              await api("/api/organizacion/" + k, {
+                method: "POST",
+                body: JSON.stringify(d),
+              });
+              org();
+            } catch (er) {
+              message(er.message);
+            }
+          };
+          document.querySelectorAll(".toggle").forEach(
+            (b) =>
+              (b.onclick = async () => {
+                try {
+                  await api(`/api/organizacion/${k}/${b.dataset.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      activo: b.dataset.active !== "true",
+                    }),
+                  });
+                  org();
+                } catch (er) {
+                  message(er.message);
+                }
+              }),
+          );
+          document.querySelectorAll(".toggle").forEach((button, index) => {
+            const edit = document.createElement("button");
+            edit.className = "secondary";
+            edit.textContent = "Editar";
+            edit.onclick = async () => {
+              const current = all[k][index];
+              const parentField = i
+                ? `<div><label>Padre</label><select name="parent_id" required>${parent.filter(x => x.activo).map(x => `<option value="${x.id}" ${x.id === current.parent_id ? "selected" : ""}>${esc(x.codigo)} · ${esc(x.nombre)}</option>`).join("")}</select></div>`
+                : "";
+              openModal(
+                `Editar ${labels[i].slice(0, -1)}`,
+                `<form id="editOrg" class="grid"><div><label>Código</label><input name="codigo" value="${esc(current.codigo)}" required></div><div><label>Nombre</label><input name="nombre" value="${esc(current.nombre)}" required></div>${parentField}<div class="actions"><button>Guardar</button><button id="cancelEditOrg" type="button" class="secondary">Cancelar</button></div></form>`,
+              );
+              $("#cancelEditOrg").onclick = closeModal;
+              $("#editOrg").onsubmit = async (event) => {
+                event.preventDefault();
+                const data = Object.fromEntries(new FormData(event.target));
+                if (data.parent_id) data.parent_id = +data.parent_id;
+                try {
+                  await api(`/api/organizacion/${k}/${current.id}`, {
+                    method: "PATCH", body: JSON.stringify(data),
+                  });
+                  closeModal();
+                  await org();
+                  message("Registro actualizado", true);
+                } catch (error) { modalMessage(error.message); }
+              };
+            };
+            button.parentElement.prepend(edit);
+          });
+        };
+        $("#kind").onchange = render;
+        render();
+      }
+      async function users() {
+        let [us, pos] = await Promise.all([
+          api("/api/usuarios?include_inactive=true"),
+          api("/api/organizacion/puestos"),
+        ]);
+        $("#content").innerHTML =
+          `<div class="card"><h2>Usuarios</h2><form id="userform" class="grid"><div><label>Nombre</label><input name="nombre" required></div><div><label>Login/correo</label><input name="login" required></div><div><label>Contraseña (mínimo 10)</label><input type="password" name="password" minlength="10" required></div><div><label>Rol</label><select name="rol"><option value="consulta">Consulta</option><option value="administrador">Administrador</option></select></div><div><label>Puesto</label><select name="puesto_id"><option value="">Sin asignar</option>${pos.map((x) => `<option value="${x.id}">${esc(x.nombre)}</option>`)}</select></div><div class="actions"><button>Crear</button></div></form><table><thead><tr><th>Login</th><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${us.map((x) => `<tr><td>${esc(x.login)}</td><td>${esc(x.nombre)}</td><td>${esc(x.rol)}</td><td>${x.activo ? "Activo" : "Inactivo"}</td><td><button class="utoggle danger" data-id="${x.id}" data-active="${x.activo}">${x.activo ? "Desactivar" : "Activar"}</button></td></tr>`).join("")}</tbody></table></div>`;
+        $("#userform").onsubmit = async (e) => {
+          e.preventDefault();
+          let d = Object.fromEntries(new FormData(e.target));
+          d.puesto_id = d.puesto_id ? +d.puesto_id : null;
+          try {
+            await api("/api/usuarios", {
+              method: "POST",
+              body: JSON.stringify(d),
+            });
+            users();
+          } catch (er) {
+            message(er.message);
+          }
+        };
+        document.querySelectorAll(".utoggle").forEach(
+          (b) =>
+            (b.onclick = async () => {
+              try {
+                await api("/api/usuarios/" + b.dataset.id, {
+                  method: "PATCH",
+                  body: JSON.stringify({ activo: b.dataset.active !== "true" }),
+                });
+                users();
+              } catch (er) {
+                message(er.message);
+              }
+              }),
+        );
+        document.querySelectorAll(".utoggle").forEach((button, index) => {
+          const edit = document.createElement("button");
+          edit.className = "secondary";
+          edit.textContent = "Editar";
+          edit.onclick = async () => {
+            const current = us[index];
+            openModal(
+              "Editar usuario",
+              `<form id="editUser" class="grid"><div><label>Nombre</label><input name="nombre" value="${esc(current.nombre)}" required></div><div><label>Login/correo</label><input name="login" value="${esc(current.login)}" required></div><div><label>Nueva contraseña</label><input type="password" name="password" minlength="10" placeholder="Dejar vacía para conservar"></div><div><label>Rol</label><select name="rol"><option value="consulta" ${current.rol === "consulta" ? "selected" : ""}>Consulta</option><option value="administrador" ${current.rol === "administrador" ? "selected" : ""}>Administrador</option></select></div><div><label>Puesto</label><select name="puesto_id"><option value="">Sin asignar</option>${pos.map(p => `<option value="${p.id}" ${p.id === current.puesto_id ? "selected" : ""}>${esc(p.nombre)}</option>`).join("")}</select></div><div class="actions"><button>Guardar</button><button id="cancelEditUser" type="button" class="secondary">Cancelar</button></div></form>`,
+            );
+            $("#cancelEditUser").onclick = closeModal;
+            $("#editUser").onsubmit = async (event) => {
+              event.preventDefault();
+              const data = Object.fromEntries(new FormData(event.target));
+              data.puesto_id = data.puesto_id ? +data.puesto_id : null;
+              if (!data.password) delete data.password;
+              try {
+                await api(`/api/usuarios/${current.id}`, {
+                  method: "PATCH", body: JSON.stringify(data),
+                });
+                closeModal();
+                await users();
+                message("Usuario actualizado", true);
+              } catch (error) { modalMessage(error.message); }
+            };
+          };
+          button.parentElement.prepend(edit);
+        });
+      }
+      async function catalogs() {
+        let kinds = ["clases", "criticidades", "tipos"];
+        let all = {};
+        for (let k of kinds)
+          all[k] = await api(`/api/catalogos/${k}?include_inactive=true`);
+        $("#content").innerHTML =
+          `<div class="card"><h2>Catálogos controlados</h2><label>Catálogo</label><select id="catkind">${kinds.map((k) => `<option>${k}</option>`)}</select></div><div id="catbody"></div>`;
+        let render = () => {
+          let k = $("#catkind").value;
+          $("#catbody").innerHTML =
+            `<div class="card"><form id="catform" class="grid"><div><label>Código</label><input name="codigo" required></div><div><label>Nombre</label><input name="nombre" required></div><div class="actions"><button>Crear</button></div></form><table>${all[k].map((x) => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td><td>${x.activo ? "Activo" : "Inactivo"}</td></tr>`).join("")}</table></div>`;
+          $("#catform").onsubmit = async (e) => {
+            e.preventDefault();
+            try {
+              await api("/api/catalogos/" + k, {
+                method: "POST",
+                body: JSON.stringify(
+                  Object.fromEntries(new FormData(e.target)),
+                ),
+              });
+              catalogs();
+            } catch (er) {
+              message(er.message);
+            }
+          };
+          $("#catbody").querySelectorAll("tr").forEach((tr, index) => {
+            const current = all[k][index];
+            const cell = document.createElement("td");
+            const toggle = document.createElement("button");
+            toggle.className = "danger";
+            toggle.textContent = current.activo ? "Desactivar" : "Activar";
+            toggle.onclick = async () => {
+              try {
+                await api(`/api/catalogos/${k}/${current.id}`, {
+                  method: "PATCH", body: JSON.stringify({ activo: !current.activo }),
+                });
+                catalogs();
+              } catch (error) { message(error.message); }
+            };
+            const edit = document.createElement("button");
+            edit.className = "secondary";
+            edit.textContent = "Editar";
+            edit.onclick = async () => {
+              openModal(
+                "Editar catálogo",
+                `<form id="editCatalog" class="grid"><div><label>Código</label><input name="codigo" value="${esc(current.codigo)}" required></div><div><label>Nombre</label><input name="nombre" value="${esc(current.nombre)}" required></div><div class="actions"><button>Guardar</button><button id="cancelEditCatalog" type="button" class="secondary">Cancelar</button></div></form>`,
+              );
+              $("#cancelEditCatalog").onclick = closeModal;
+              $("#editCatalog").onsubmit = async (event) => {
+                event.preventDefault();
+                const data = Object.fromEntries(new FormData(event.target));
+                try {
+                  await api(`/api/catalogos/${k}/${current.id}`, {
+                    method: "PATCH", body: JSON.stringify(data),
+                  });
+                  closeModal();
+                  await catalogs();
+                  message("Catálogo actualizado", true);
+                } catch (error) { modalMessage(error.message); }
+              };
+            };
+            cell.append(edit, toggle);
+            tr.append(cell);
+          });
+        };
+        $("#catkind").onchange = render;
+        render();
+      }
+      async function imports() {
+        let lots = await api("/api/importaciones");
+        $("#content").innerHTML =
+          `<div class="card"><h2>Importaciones</h2><p>Fuente esperada: <code>data/CatalogoServicios.xlsx</code>.</p>${me.rol === "administrador" ? '<button id="runimp">Importar original</button>' : ""}<table><thead><tr><th>Lote</th><th>SHA-256</th><th>Creados</th><th>Actualizados</th><th>Omitidos</th><th>Observados</th></tr></thead><tbody>${lots.map((x) => `<tr><td>${x.id}</td><td><code>${esc(x.sha256.slice(0, 12))}…</code></td><td>${x.creados}</td><td>${x.actualizados}</td><td>${x.omitidos}</td><td>${x.observados}</td></tr>`).join("")}</tbody></table></div>`;
+        if ($("#runimp"))
+          $("#runimp").onclick = async () => {
+            try {
+              let x = await api("/api/importaciones", { method: "POST" });
+              message(`Importación completada: ${JSON.stringify(x)}`, true);
+              imports();
+            } catch (er) {
+              message(er.message);
+            }
+          };
+      }
+      session();
+    </script>
+  </body>
+</html>
