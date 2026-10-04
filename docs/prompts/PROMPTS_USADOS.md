@@ -1,6 +1,6 @@
 # Prompts utilizados con Claude Code
 
-Herramienta: Claude Code CLI 2.1.276.0 mediante `claude -p`. Fecha: 2026-10-01. La CLI no expuso en su salida el identificador exacto del modelo seleccionado; no se inventa. Todas las consultas fueron de solo lectura (`--permission-mode plan`).
+Herramienta: Claude Code.
 
 ## P1 — arquitectura inicial
 
@@ -11,6 +11,7 @@ Herramienta: Claude Code CLI 2.1.276.0 mediante `claude -p`. Fecha: 2026-10-01. 
 - Aceptación: cubrir todos los dominios y reconocer honestamente la dependencia ausente.
 - Resultado: FastAPI/PostgreSQL/Jinja/JS, sesiones revocables y fixture sintético. Aceptado.
 
+![alt text](image.png)
 ## P2 — auditoría integral
 
 - Objetivo: hallar brechas después de la primera implementación.
@@ -18,7 +19,8 @@ Herramienta: Claude Code CLI 2.1.276.0 mediante `claude -p`. Fecha: 2026-10-01. 
 - Instrucción usada: “Audita requisito por requisito… identifica defectos concretos con archivo/causa/corrección… termina PASS/FAIL condicionado”.
 - Aceptación: hallazgos trazables, sin exigir datos ficticios.
 - Resultado: detectó documentación, demo, UI, CSRF y trazabilidad. Se corrigieron los hallazgos técnicos; el Excel, entonces pendiente, llegó después y activó un ciclo adicional del harness. Git sigue pendiente por instrucción expresa.
-
+![alt text](image-1.png)
+![alt text](image-4.png)
 ## P3 — análisis del Excel/importador
 
 - Objetivo: auditar las seis reglas reales de calidad.
@@ -45,3 +47,5 @@ Herramienta: Claude Code CLI 2.1.276.0 mediante `claude -p`. Fecha: 2026-10-01. 
 
 1. P1 propuso la arquitectura, pero todavía no podía evaluar código. P2 añadió código y resultado real; descubrió brechas de UI/demo y originó correcciones concretas.
 2. P2 señaló trazabilidad general. P3 redujo el contexto al importador y precisó que cada servicio normal carecía de origen y que “actualizado” era inexacto; el modelo/importador se corrigió y se reejecutaron pruebas.
+![alt text](image-2.png)
+![alt text](image-3.png)
