@@ -230,7 +230,10 @@ def service_dict(x: ServicioNivel2):
         "tipo_id": x.tipo_id, "tipo": x.tipo.nombre if x.tipo else None, "descripcion": x.descripcion,
         "metrica": x.metrica, "minimo": str(x.minimo) if x.minimo is not None else None,
         "maximo": str(x.maximo) if x.maximo is not None else None, "estado_revision": x.estado_revision,
-        "seccion_responsable_id": x.seccion_responsable_id, "usuario_responsable_id": x.usuario_responsable_id,
+        "seccion_responsable_id": x.seccion_responsable_id,
+        "seccion_responsable": x.seccion_responsable.nombre if x.seccion_responsable else None,
+        "usuario_responsable_id": x.usuario_responsable_id,
+        "usuario_responsable": x.usuario_responsable.nombre if x.usuario_responsable else None,
         "origen_hoja": x.origen_hoja, "origen_fila": x.origen_fila, "origen_rango": x.origen_rango,
         "activo": x.activo}
 
@@ -244,7 +247,11 @@ def list_services(q: str | None = None, nivel1_id: int | None = None, activo: bo
     for col, value in [(ServicioNivel2.nivel1_id,nivel1_id),(ServicioNivel2.activo,activo),(ServicioNivel2.clase_id,clase_id),(ServicioNivel2.criticidad_id,criticidad_id),(ServicioNivel2.tipo_id,tipo_id)]:
         if value is not None: filters.append(col == value)
     total = db.scalar(select(func.count()).select_from(ServicioNivel2).where(*filters)) or 0
-    stmt = select(ServicioNivel2).options(joinedload(ServicioNivel2.nivel1), joinedload(ServicioNivel2.clase), joinedload(ServicioNivel2.criticidad), joinedload(ServicioNivel2.tipo)).where(*filters).order_by(ServicioNivel2.codigo).offset((page-1)*size).limit(size)
+    stmt = select(ServicioNivel2).options(
+        joinedload(ServicioNivel2.nivel1), joinedload(ServicioNivel2.clase),
+        joinedload(ServicioNivel2.criticidad), joinedload(ServicioNivel2.tipo),
+        joinedload(ServicioNivel2.seccion_responsable), joinedload(ServicioNivel2.usuario_responsable),
+    ).where(*filters).order_by(ServicioNivel2.codigo).offset((page-1)*size).limit(size)
     return {"items": [service_dict(x) for x in db.scalars(stmt)], "page": page, "size": size, "total": total, "pages": (total + size - 1)//size}
 
 @app.get("/api/servicios/{item_id}")

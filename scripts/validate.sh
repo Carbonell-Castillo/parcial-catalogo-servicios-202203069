@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-docker compose build
+docker compose --profile test build
 docker compose run --rm --no-deps --entrypoint pytest app -q --disable-warnings
 docker compose up --build -d
 ready=0
@@ -22,3 +22,4 @@ else
   echo "ADVERTENCIA: importación real omitida; falta data/CatalogoServicios.xlsx" >&2
 fi
 docker compose --profile test run --rm e2e
+sh scripts/test-persistence.sh

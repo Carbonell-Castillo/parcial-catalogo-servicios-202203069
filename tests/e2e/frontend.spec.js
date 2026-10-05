@@ -27,6 +27,7 @@ test('login, pestañas, búsqueda, ficha y volver', async ({ page }) => {
   await page.getByRole('button', { name: 'Editar' }).first().click();
   await page.getByRole('dialog').locator('input[name="nombre"]').fill(originalOrgName);
   await page.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
   await expect(page.locator('#orgbody')).toContainText(originalOrgName);
   await page.getByRole('button', { name: 'Usuarios' }).click();
   await expect(page.getByRole('heading', { name: 'Usuarios' })).toBeVisible();
@@ -42,12 +43,23 @@ test('login, pestañas, búsqueda, ficha y volver', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Importaciones' })).toBeVisible();
   await page.getByRole('button', { name: 'Servicios', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Servicios', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Niveles 1' }).click();
+  await expect(page.getByRole('dialog').getByRole('heading')).toHaveText('Servicios Nivel 1');
+  await expect(page.getByRole('dialog').locator('tbody')).toContainText('SE.12');
+  await page.getByRole('dialog').getByRole('button', { name: 'Editar' }).first().click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Guardar cambios' })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar edición' }).click();
+  await page.locator('#modalClose').click();
 
   await page.locator('input[name="q"]').fill('SE.12.3');
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expect(page.locator('tbody')).toContainText('SE.12.3');
   await page.getByRole('button', { name: 'Ver' }).click();
   await expect(page.locator('#content h2')).toContainText('SE.12.3');
+  await expect(page.locator('#content')).toContainText('Código original:');
+  await expect(page.locator('#content')).toContainText('Sección responsable:');
+  await expect(page.locator('#content')).toContainText('Usuario responsable:');
+  await expect(page.locator('#content')).toContainText('Origen:');
   await page.getByRole('button', { name: 'Editar' }).click();
   await expect(page.getByRole('dialog').getByRole('heading')).toHaveText('Editar servicio');
   await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click();

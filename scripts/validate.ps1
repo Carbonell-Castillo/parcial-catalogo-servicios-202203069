@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-docker compose build
+docker compose --profile test build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 docker compose run --rm --no-deps --entrypoint pytest app -q --disable-warnings
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -24,4 +24,6 @@ if (Test-Path -LiteralPath 'data/CatalogoServicios.xlsx') {
   Write-Warning 'Importación real omitida: falta data/CatalogoServicios.xlsx'
 }
 docker compose --profile test run --rm e2e
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+powershell -ExecutionPolicy Bypass -File scripts/test-persistence.ps1
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

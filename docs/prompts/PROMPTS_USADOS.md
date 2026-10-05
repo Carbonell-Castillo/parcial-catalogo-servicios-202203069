@@ -43,6 +43,16 @@ Herramienta: Claude Code.
 - Instrucción usada: “Audita exclusivamente reproducibilidad Docker y cobertura P01–P12… falta el Excel original y no pidas inventarlo”.
 - Resultado: P12 equivalente en Bash, `up --build`, healthcheck de app y aclaración de niveles de prueba.
 
+## P6 — auditoría final del árbol de trabajo
+
+- Ejecución: 2026-10-05; Claude Code CLI 2.1.276; modelo predeterminado no expuesto por el CLI.
+- Objetivo: contrastar las correcciones finales con `Implementacion.md`, `AGENTS.md` y el diff sin modificar el repositorio.
+- Contexto: repositorio completo y resultados `15 passed`, Playwright `1 passed`, importación 12/46 idempotente y P12 OK.
+- Instrucción usada: “Audita en solo lectura este repositorio contra Implementacion.md y AGENTS.md. No leas .env, no edites ni hagas commits. Revisa especialmente el git diff actual… Lista solo brechas verificables restantes”.
+- Restricciones/salida: máximo 500 palabras, brechas comprobables y veredictos técnico/Git separados.
+- Aceptación: distinguir fallos funcionales de pendientes de entrega y no proponer alterar fechas Git.
+- Resultado: veredicto técnico PASS condicionado; detectó que el flujo Bash dependía de bits ejecutables ausentes, que faltaba registrar la corrida final y que el commit/tag de entrega seguía pendiente. Se cambiaron las invocaciones a `sh`, se registró el resultado real y se mantuvo explícito el pendiente Git.
+
 ## Dos iteraciones de mejora comprobadas
 
 1. P1 propuso la arquitectura, pero todavía no podía evaluar código. P2 añadió código y resultado real; descubrió brechas de UI/demo y originó correcciones concretas.

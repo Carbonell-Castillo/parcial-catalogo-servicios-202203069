@@ -185,7 +185,7 @@
             )
             .join("");
         $("#content").innerHTML =
-          `<div class="card"><h2>Servicios</h2><form id="filter" class="grid"><div><label>Código o nombre</label><input name="q"></div><div><label>Nivel 1</label><select name="nivel1_id">${options(n1)}</select></div><div><label>Clase</label><select name="clase_id">${options(cl)}</select></div><div><label>Criticidad</label><select name="criticidad_id">${options(cr)}</select></div><div><label>Tipo</label><select name="tipo_id">${options(ty)}</select></div><div class="actions"><button>Buscar</button>${me.rol === "administrador" ? '<button type="button" id="newSvc">Nuevo</button>' : ""}</div></form></div><div class="card"><p>${data.total} resultados · página ${data.page}/${data.pages || 1}</p><table><thead><tr><th>Código</th><th>Nombre</th><th>Nivel 1</th><th>Clase</th><th>Estado</th><th></th></tr></thead><tbody>${data.items.map((x) => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td><td>${esc(x.nivel1)}</td><td>${esc(x.clase || "Desconocida")}</td><td><span class="badge">${x.activo ? "Activo" : "Inactivo"}</span></td><td><button class="secondary detail" data-id="${x.id}">Ver</button></td></tr>`).join("")}</tbody></table><p class="actions"><button id="prev" ${data.page <= 1 ? "disabled" : ""}>Anterior</button><button id="next" ${data.page >= data.pages ? "disabled" : ""}>Siguiente</button></p></div>`;
+          `<div class="card"><h2>Servicios</h2><form id="filter" class="grid"><div><label>Código o nombre</label><input name="q"></div><div><label>Nivel 1</label><select name="nivel1_id">${options(n1)}</select></div><div><label>Clase</label><select name="clase_id">${options(cl)}</select></div><div><label>Criticidad</label><select name="criticidad_id">${options(cr)}</select></div><div><label>Tipo</label><select name="tipo_id">${options(ty)}</select></div><div class="actions"><button>Buscar</button>${me.rol === "administrador" ? '<button type="button" id="newSvc">Nuevo</button><button type="button" class="secondary" id="manageN1">Niveles 1</button>' : ""}</div></form></div><div class="card"><p>${data.total} resultados · página ${data.page}/${data.pages || 1}</p><table><thead><tr><th>Código</th><th>Nombre</th><th>Nivel 1</th><th>Clase</th><th>Estado</th><th></th></tr></thead><tbody>${data.items.map((x) => `<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td><td>${esc(x.nivel1)}</td><td>${esc(x.clase || "Desconocida")}</td><td><span class="badge">${x.activo ? "Activo" : "Inactivo"}</span></td><td><button class="secondary detail" data-id="${x.id}">Ver</button></td></tr>`).join("")}</tbody></table><p class="actions"><button id="prev" ${data.page <= 1 ? "disabled" : ""}>Anterior</button><button id="next" ${data.page >= data.pages ? "disabled" : ""}>Siguiente</button></p></div>`;
         const statusFilter = document.createElement("div");
         statusFilter.innerHTML = '<label>Estado</label><select name="activo"><option value="true">Activos</option><option value="false">Inactivos</option></select>';
         $("#filter").insertBefore(statusFilter, $("#filter").lastElementChild);
@@ -212,11 +212,12 @@
           .forEach((b) => (b.onclick = () => serviceDetail(b.dataset.id)));
         if ($("#newSvc"))
           $("#newSvc").onclick = () => serviceForm(null, { n1, cl, cr, ty });
+        if ($("#manageN1")) $("#manageN1").onclick = () => level1Manager();
       }
       async function serviceDetail(id) {
         let x = await api("/api/servicios/" + id);
         $("#content").innerHTML =
-          `<div class="card"><h2>${esc(x.codigo)} · ${esc(x.nombre)}</h2><p><b>Nivel 1:</b> ${esc(x.nivel1)}</p><div class="grid"><p><b>Activo Excel:</b> ${esc(x.indicador_activo_excel || "Desconocido")}</p><p><b>Clase:</b> ${esc(x.clase || "Desconocida")}</p><p><b>Criticidad:</b> ${esc(x.criticidad || "Desconocida")}</p><p><b>Tipo:</b> ${esc(x.tipo || "Desconocido")}</p><p><b>Métrica:</b> ${esc(x.metrica || "Desconocida")}</p><p><b>Rango:</b> ${esc(x.minimo ?? "—")} – ${esc(x.maximo ?? "—")}</p><p><b>Revisión:</b> ${esc(x.estado_revision)}</p></div><p>${esc(x.descripcion || "Sin descripción")}</p><div class="actions"><button id="backServices">Volver</button>${me.rol === "administrador" ? `<button id="edit">Editar</button><button id="toggle" class="danger">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</div></div>`;
+          `<div class="card"><h2>${esc(x.codigo)} · ${esc(x.nombre)}</h2><div class="grid"><p><b>Código original:</b> ${esc(x.codigo_original || "—")}</p><p><b>Nivel 1:</b> ${esc(x.nivel1)}</p><p><b>Estado operativo:</b> ${x.activo ? "Activo" : "Inactivo"}</p><p><b>Activo Excel:</b> ${esc(x.indicador_activo_excel || "Desconocido")}</p><p><b>Clase:</b> ${esc(x.clase || "Desconocida")}</p><p><b>Criticidad:</b> ${esc(x.criticidad || "Desconocida")}</p><p><b>Tipo:</b> ${esc(x.tipo || "Desconocido")}</p><p><b>Métrica:</b> ${esc(x.metrica || "Desconocida")}</p><p><b>Rango:</b> ${esc(x.minimo ?? "—")} – ${esc(x.maximo ?? "—")}</p><p><b>Revisión:</b> ${esc(x.estado_revision)}</p><p><b>Sección responsable:</b> ${esc(x.seccion_responsable || "Sin asignar")}</p><p><b>Usuario responsable:</b> ${esc(x.usuario_responsable || "Sin asignar")}</p><p><b>Origen:</b> ${esc(x.origen_hoja || "—")} · fila ${esc(x.origen_fila ?? "—")} · ${esc(x.origen_rango || "sin rango")}</p></div><p><b>Descripción:</b> ${esc(x.descripcion || "Sin descripción")}</p><div class="actions"><button id="backServices">Volver</button>${me.rol === "administrador" ? `<button id="edit">Editar</button><button id="toggle" class="danger">${x.activo ? "Desactivar" : "Activar"}</button>` : ""}</div></div>`;
         $("#backServices").onclick = () => services();
         if ($("#edit")) {
           $("#edit").onclick = async () => serviceForm(x);
@@ -233,6 +234,40 @@
             }
           };
         }
+      }
+      async function level1Manager(editing = null) {
+        const items = await api("/api/servicios/nivel1?include_inactive=true");
+        openModal(
+          "Servicios Nivel 1",
+          `<form id="level1Form" class="grid"><div><label>Código</label><input name="codigo" value="${esc(editing?.codigo || "")}" required></div><div><label>Nombre</label><input name="nombre" value="${esc(editing?.nombre || "")}" required></div><div class="actions"><button>${editing ? "Guardar cambios" : "Crear"}</button>${editing ? '<button type="button" id="cancelLevel1Edit" class="secondary">Cancelar edición</button>' : ""}</div></form><table><thead><tr><th>Código</th><th>Nombre</th><th>Estado</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>${esc(item.codigo)}</td><td>${esc(item.nombre)}</td><td>${item.activo ? "Activo" : "Inactivo"}</td><td><button type="button" class="secondary editLevel1" data-id="${item.id}">Editar</button> <button type="button" class="danger toggleLevel1" data-id="${item.id}" data-active="${item.activo}">${item.activo ? "Desactivar" : "Activar"}</button></td></tr>`).join("")}</tbody></table>`,
+        );
+        if ($("#cancelLevel1Edit")) $("#cancelLevel1Edit").onclick = () => level1Manager();
+        $("#level1Form").onsubmit = async (event) => {
+          event.preventDefault();
+          const data = Object.fromEntries(new FormData(event.target));
+          try {
+            await api(editing ? `/api/servicios/nivel1/${editing.id}` : "/api/servicios/nivel1", {
+              method: editing ? "PATCH" : "POST",
+              body: JSON.stringify(data),
+            });
+            await level1Manager();
+            modalMessage(editing ? "Nivel 1 actualizado" : "Nivel 1 creado", true);
+          } catch (error) { modalMessage(error.message); }
+        };
+        document.querySelectorAll(".editLevel1").forEach((button) => {
+          button.onclick = () => level1Manager(items.find((item) => item.id === +button.dataset.id));
+        });
+        document.querySelectorAll(".toggleLevel1").forEach((button) => {
+          button.onclick = async () => {
+            try {
+              await api(`/api/servicios/nivel1/${button.dataset.id}`, {
+                method: "PATCH", body: JSON.stringify({ activo: button.dataset.active !== "true" }),
+              });
+              await level1Manager();
+              modalMessage("Estado actualizado", true);
+            } catch (error) { modalMessage(error.message); }
+          };
+        });
       }
       async function serviceForm(x, lists) {
         lists = lists || {

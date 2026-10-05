@@ -82,15 +82,24 @@ Login acepta usuario/correo y valida Argon2id. El navegador recibe un token alea
 | P12 | volumen y restart | `scripts/test-persistence.ps1/.sh` |
 | CRUD/roles | API y UI; bajas lógicas bloqueadas con dependencias | suite + revisión manual |
 | Docker | build, migración, seed, healthchecks, volumen | `scripts/validate.*` |
-| UI interactiva | pestañas, búsqueda, ficha y regreso | Playwright `tests/e2e/frontend.spec.js` |
+| UI interactiva | pestañas, búsqueda, ficha, modales, Nivel 1 y regreso | Playwright `tests/e2e/frontend.spec.js` |
 
 P01–P11 son pruebas de integración HTTP aisladas con SQLite en memoria; las restricciones y consultas se ejecutan también en PostgreSQL al levantar Compose. P12 es una prueba de sistema contra PostgreSQL real. El E2E corre Chromium en un contenedor Playwright contra la aplicación real por la red de Compose.
 
 ## 8. Resultados reales
 
-El 2026-10-01 se ejecutó dentro de Docker: primera corrida `8 failed, 2 passed, 1 skipped`; el error fue un import faltante de `timezone`. Tras corregirlo: `10 passed, 1 skipped` en 2.53 s. Después de las auditorías focalizadas: `11 passed, 1 skipped` en 3.46 s. Al llegar el Excel real, la primera carga falló por continuaciones de C combinada; corregida esa regla obtuvo 12/45 y reveló la excepción de fila 101. La suite final, ya con el original, obtuvo `13 passed` en 4.47 s. Desde un volumen limpio, la carga creó 12 N1 + 46 N2 (`creados=58`) y la repetición dio `creados=0`, `actualizados=0`, `nivel1=12`, `nivel2=46`. PostgreSQL respondió a salud/login y P12 confirmó persistencia. No se afirma un commit: el solicitante pidió no crear commits.
+El 2026-10-01 se ejecutó dentro de Docker: primera corrida `8 failed, 2 passed, 1 skipped`; el error fue un import faltante de `timezone`. Tras corregirlo: `10 passed, 1 skipped` en 2.53 s. Después de las auditorías focalizadas: `11 passed, 1 skipped` en 3.46 s. Al llegar el Excel real, la primera carga falló por continuaciones de C combinada; corregida esa regla obtuvo 12/45 y reveló la excepción de fila 101. La suite, ya con el original, obtuvo `13 passed` en 4.47 s. Desde un volumen limpio, la carga creó 12 N1 + 46 N2 (`creados=58`) y la repetición dio `creados=0`, `actualizados=0`, `nivel1=12`, `nivel2=46`.
+
+El 2026-10-05 se ejecutó `powershell -ExecutionPolicy Bypass -File scripts/validate.ps1` sobre la base `70f7316f2ab139d4ef8b8d09165fb1274e4e719b` y el árbol de trabajo auditado. Resultado final: `15 passed`, Playwright `1 passed`, importación `nivel1=12`, `nivel2=46`, `creados=0`, `actualizados=0`, y `P12 OK` con dos usuarios persistentes después del reinicio. Durante esta corrida se detectaron y corrigieron dos fallos del propio harness: la imagen E2E no se reconstruía y P12 aceptaba una salida vacía de `psql`. Las correcciones actuales aún no tienen un commit final; no se atribuye falsamente el resultado al SHA base.
 
 ## 9. Docker, persistencia y recuperación
 
 El flujo está en [README](../README.md). `docker compose down` conserva datos; `docker compose down -v` destruye el volumen y solo se usa para reiniciar pruebas. El entrypoint migra y hace seed idempotente antes de iniciar. Logs: `docker compose logs -f app db`. La fuente está montada como solo lectura.
 
+## 10. Limitaciones, aportes y reflexión
+
+La solución deliberadamente no incluye tickets, facturación ni consumo. El inicio de sesión no aplica rate limiting distribuido; en un despliegue público debería añadirse un control compartido y un proxy TLS. La interfaz está orientada a escritorio y usa JavaScript sin un framework, una decisión apropiada para el alcance, aunque una aplicación mayor se beneficiaría de componentes y pruebas visuales adicionales.
+
+Los aportes principales son una importación auditable e idempotente que conserva anomalías sin alterar el Excel, separación explícita entre el indicador externo y la baja lógica interna, sesiones revocables cuyos tokens no se almacenan en claro, autorización del lado servidor y un harness que recorre desde pruebas HTTP hasta persistencia PostgreSQL y navegador real.
+
+El ciclo de ingeniería mostró que una prueba verde no sustituye revisar los datos reales: las combinaciones de celdas y la fila 101 solo aparecieron al incorporar el archivo original. También mostró el valor de probar la interfaz completa: el buscador y las pestañas fallaron por integración aunque las rutas aisladas respondían. La respuesta fue convertir ambos hallazgos en reglas acotadas y pruebas de regresión reproducibles.
