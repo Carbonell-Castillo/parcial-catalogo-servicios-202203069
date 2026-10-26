@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, JSON, LargeBinary
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -174,3 +174,199 @@ class ImportacionObservacion(Base):
     detalle: Mapped[str] = mapped_column(Text, nullable=False)
     valor_original: Mapped[Optional[str]] = mapped_column(Text)
     valor_canonico: Mapped[Optional[str]] = mapped_column(Text)
+
+
+# Service Desk.  The original ``Usuario.rol`` remains the deliberately narrow
+# administrator/consulta role from the first delivery.  Operational roles are
+# additive so a user can be requester, agent and/or approver without ever
+# turning a consulta account into an administrator.
+class UsuarioRol(Base):
+    __tablename__ = "usuario_rol"
+    __table_args__ = (UniqueConstraint("usuario_id", "rol", name="uq_usuario_rol"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"), nullable=False)
+    rol: Mapped[str] = mapped_column(String(30), nullable=False)
+
+
+class Cola(AuditMixin, Base):
+    __tablename__ = "cola"
+    codigo: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(160), nullable=False)
+    descripcion: Mapped[Optional[str]] = mapped_column(Text)
+    proceso: Mapped[str] = mapped_column(String(40), nullable=False)
+    nivel_soporte: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    regla_orden: Mapped[str] = mapped_column(String(80), default="prioridad_antiguedad", nullable=False)
+    objetivo_primera_min: Mapped[int] = mapped_column(Integer, default=240, nullable=False)
+    objetivo_resolucion_min: Mapped[int] = mapped_column(Integer, default=1440, nullable=False)
+    calendario: Mapped[str] = mapped_column(String(20), default="calendario", nullable=False)
+
+
+class ColaMiembro(Base):
+    __tablename__ = "cola_miembro"
+    __table_args__ = (UniqueConstraint("cola_id", "usuario_id", name="uq_cola_miembro"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cola_id: Mapped[int] = mapped_column(ForeignKey("cola.id", ondelete="CASCADE"), nullable=False)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
+    puede_consultar: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    puede_atender: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    puede_transferir: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    puede_aprobar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    puede_administrar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class ColaRol(Base):
+    __tablename__ = "cola_rol"
+    __table_args__ = (UniqueConstraint("cola_id", "rol", name="uq_cola_rol"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cola_id: Mapped[int] = mapped_column(ForeignKey("cola.id", ondelete="CASCADE"), nullable=False)
+    rol: Mapped[str] = mapped_column(String(30), nullable=False)
+    puede_consultar: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    puede_atender: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    puede_transferir: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    puede_aprobar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    puede_administrar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class ClasificacionCI(AuditMixin, Base):
+    __tablename__ = "clasificacion_ci"
+    __table_args__ = (UniqueConstraint("padre_id", "codigo", name="uq_clasificacion_padre_codigo"),)
+    codigo: Mapped[str] = mapped_column(String(60), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(160), nullable=False)
+    padre_id: Mapped[Optional[int]] = mapped_column(ForeignKey("clasificacion_ci.id", ondelete="RESTRICT"))
+    atributos_definidos: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    origen: Mapped[str] = mapped_column(String(200), default="CMDB.xlsx!CMDB:C4", nullable=False)
+    padre: Mapped[Optional["ClasificacionCI"]] = relationship(remote_side="ClasificacionCI.id")
+
+
+class DispositivoCI(AuditMixin, Base):
+    __tablename__ = "dispositivo_ci"
+    etiqueta: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(180), nullable=False)
+    clasificacion_id: Mapped[int] = mapped_column(ForeignKey("clasificacion_ci.id", ondelete="RESTRICT"), nullable=False)
+    estado: Mapped[str] = mapped_column(String(40), nullable=False)
+    ubicacion: Mapped[str] = mapped_column(String(180), nullable=False)
+    responsable_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"))
+    numero_serie: Mapped[Optional[str]] = mapped_column(String(120), unique=True)
+    version: Mapped[Optional[str]] = mapped_column(String(80))
+    fecha_adquisicion: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    nivel_seguridad: Mapped[Optional[str]] = mapped_column(String(30))
+    cumplimiento: Mapped[Optional[str]] = mapped_column(String(80))
+    estado_configuracion: Mapped[Optional[str]] = mapped_column(String(80))
+    licencia: Mapped[Optional[str]] = mapped_column(String(120))
+    fecha_vencimiento: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    atributos: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    clasificacion: Mapped[ClasificacionCI] = relationship()
+
+
+class RelacionCI(Base):
+    __tablename__ = "relacion_ci"
+    __table_args__ = (UniqueConstraint("origen_id", "destino_id", "tipo", name="uq_relacion_ci"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    origen_id: Mapped[int] = mapped_column(ForeignKey("dispositivo_ci.id", ondelete="CASCADE"), nullable=False)
+    destino_id: Mapped[int] = mapped_column(ForeignKey("dispositivo_ci.id", ondelete="CASCADE"), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(40), nullable=False)
+    permite_ciclo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class ServicioCI(Base):
+    __tablename__ = "servicio_ci"
+    __table_args__ = (UniqueConstraint("servicio_id", "ci_id", name="uq_servicio_ci"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    servicio_id: Mapped[int] = mapped_column(ForeignKey("servicio_nivel2.id", ondelete="CASCADE"), nullable=False)
+    ci_id: Mapped[int] = mapped_column(ForeignKey("dispositivo_ci.id", ondelete="CASCADE"), nullable=False)
+
+
+class Ticket(AuditMixin, Base):
+    __tablename__ = "ticket"
+    numero: Mapped[str] = mapped_column(String(30), unique=True, nullable=False)
+    titulo: Mapped[str] = mapped_column(String(240), nullable=False)
+    descripcion: Mapped[str] = mapped_column(Text, nullable=False)
+    solicitante_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
+    creador_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
+    servicio_id: Mapped[int] = mapped_column(ForeignKey("servicio_nivel2.id", ondelete="RESTRICT"), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(40), nullable=False)
+    proceso: Mapped[str] = mapped_column(String(40), nullable=False)
+    cola_id: Mapped[int] = mapped_column(ForeignKey("cola.id", ondelete="RESTRICT"), nullable=False)
+    responsable_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"))
+    estado: Mapped[str] = mapped_column(String(50), nullable=False)
+    prioridad: Mapped[str] = mapped_column(String(20), nullable=False)
+    impacto: Mapped[str] = mapped_column(String(20), nullable=False)
+    urgencia: Mapped[str] = mapped_column(String(20), nullable=False)
+    canal: Mapped[str] = mapped_column(String(30), nullable=False)
+    sin_ci_justificacion: Mapped[Optional[str]] = mapped_column(Text)
+    datos_proceso: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    primera_atencion_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    resuelto_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    cerrado_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    reaperturas: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cola: Mapped[Cola] = relationship()
+    servicio: Mapped[ServicioNivel2] = relationship()
+
+
+class TicketHistorial(Base):
+    __tablename__ = "ticket_historial"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
+    accion: Mapped[str] = mapped_column(String(60), nullable=False)
+    anterior: Mapped[Optional[dict]] = mapped_column(JSON)
+    nuevo: Mapped[Optional[dict]] = mapped_column(JSON)
+    motivo: Mapped[Optional[str]] = mapped_column(Text)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TicketComentario(Base):
+    __tablename__ = "ticket_comentario"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    autor_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    interno: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TicketAdjunto(Base):
+    __tablename__ = "ticket_adjunto"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    autor_id: Mapped[int] = mapped_column(ForeignKey("usuario.id", ondelete="RESTRICT"), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(240), nullable=False)
+    tipo_mime: Mapped[str] = mapped_column(String(100), nullable=False)
+    tamano: Mapped[int] = mapped_column(Integer, nullable=False)
+    contenido: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TicketCI(Base):
+    __tablename__ = "ticket_ci"
+    __table_args__ = (UniqueConstraint("ticket_id", "ci_id", name="uq_ticket_ci"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    ci_id: Mapped[int] = mapped_column(ForeignKey("dispositivo_ci.id", ondelete="RESTRICT"), nullable=False)
+
+
+class TicketRelacion(Base):
+    __tablename__ = "ticket_relacion"
+    __table_args__ = (UniqueConstraint("ticket_id", "relacionado_id", "tipo", name="uq_ticket_relacion"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    relacionado_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class Notificacion(Base):
+    __tablename__ = "notificacion"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("ticket.id", ondelete="CASCADE"), nullable=False)
+    destinatario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuario.id", ondelete="CASCADE"))
+    canal: Mapped[str] = mapped_column(String(30), default="aplicacion", nullable=False)
+    mensaje: Mapped[str] = mapped_column(Text, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    leida_en: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class ArticuloConocimiento(AuditMixin, Base):
+    __tablename__ = "articulo_conocimiento"
+    titulo: Mapped[str] = mapped_column(String(240), nullable=False)
+    contenido: Mapped[str] = mapped_column(Text, nullable=False)
+    etiquetas: Mapped[Optional[str]] = mapped_column(String(240))
