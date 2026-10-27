@@ -21,5 +21,7 @@ if [ -f data/CatalogoServicios.xlsx ]; then
 else
   echo "ADVERTENCIA: importación real omitida; falta data/CatalogoServicios.xlsx" >&2
 fi
+docker compose exec -T app python -m app.cli generate-cmdb --count 5000 --seed 20261028
+docker compose exec -T app python -m app.cli seed-tickets
 docker compose --profile test run --rm e2e
 sh scripts/test-persistence.sh

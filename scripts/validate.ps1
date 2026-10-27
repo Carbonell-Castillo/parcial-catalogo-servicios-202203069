@@ -23,6 +23,10 @@ if (Test-Path -LiteralPath 'data/CatalogoServicios.xlsx') {
 } else {
   Write-Warning 'Importación real omitida: falta data/CatalogoServicios.xlsx'
 }
+docker compose exec -T app python -m app.cli generate-cmdb --count 5000 --seed 20261028
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+docker compose exec -T app python -m app.cli seed-tickets
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 docker compose --profile test run --rm e2e
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 powershell -ExecutionPolicy Bypass -File scripts/test-persistence.ps1

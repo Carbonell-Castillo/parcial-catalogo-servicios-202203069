@@ -13,6 +13,11 @@ test('login, pestañas, búsqueda, ficha y volver', async ({ page }) => {
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
 
   await expect(page.getByRole('heading', { name: 'Servicios', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Tickets' }).click();
+  await page.locator('#ticketProcess').selectOption('eventos');
+  await expect(page.getByLabel('Categoría del evento')).toBeVisible();
+  await expect(page.getByLabel('Categoría del evento')).toHaveValue('E2');
+  await page.getByRole('button', { name: 'Servicios', exact: true }).click();
   await page.getByRole('button', { name: 'Organización' }).click();
   await expect(page.getByRole('heading', { name: 'Organización' })).toBeVisible();
   await page.getByRole('button', { name: 'Editar' }).first().click();
