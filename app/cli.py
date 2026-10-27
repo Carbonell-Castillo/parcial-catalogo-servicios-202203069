@@ -60,6 +60,12 @@ def main():
     commands.add_parser("seed")
     imp = commands.add_parser("import")
     imp.add_argument("path", nargs="?", default="data/CatalogoServicios.xlsx")
+    cmdb = commands.add_parser("generate-cmdb")
+    cmdb.add_argument("--count", type=int, default=5000)
+    cmdb.add_argument("--seed", type=int, default=20261028)
+    commands.add_parser("seed-service-desk")
+    commands.add_parser("seed-tickets")
+    commands.add_parser("counts")
     args = parser.parse_args()
     if args.command == "seed": seed()
     elif args.command == "import":
@@ -67,5 +73,20 @@ def main():
             result = import_excel(db, Path(args.path))
             ensure_demo(db, assign_services=True); db.commit()
             print(result.dict())
+    elif args.command == "generate-cmdb":
+        from app.demo import generate_cmdb
+        with SessionLocal() as db: print(generate_cmdb(db, args.count, args.seed))
+    elif args.command == "seed-service-desk":
+        from app.demo import seed_service_desk
+        with SessionLocal() as db: print(seed_service_desk(db))
+    elif args.command == "seed-tickets":
+        from app.demo import seed_tickets
+        with SessionLocal() as db: print(seed_tickets(db))
+    elif args.command == "counts":
+        from sqlalchemy import func
+        from app.models import DispositivoCI, ServicioNivel2, Ticket, TicketHistorial
+        with SessionLocal() as db:
+            values=[db.scalar(select(func.count()).select_from(model)) for model in (ServicioNivel2,DispositivoCI,Ticket,TicketHistorial)]
+            print(",".join(str(x) for x in values))
 
 if __name__ == "__main__": main()

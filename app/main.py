@@ -18,13 +18,15 @@ from app.importer import import_excel
 from app.models import (
     Area, ClaseServicio, Criticidad, Departamento, Empresa, ImportacionLote,
     ImportacionObservacion, Puesto, Seccion, ServicioNivel1, ServicioNivel2,
-    Sesion, TipoServicio, Usuario, utcnow,
+    Sesion, Ticket, TipoServicio, Usuario, utcnow,
 )
 from app.schemas import CatalogIn, LoginIn, OrgIn, OrgUpdate, ServiceN1In, ServiceN2In, ServiceN2Update, UserIn, UserUpdate
 from app.security import COOKIE_NAME, create_session, csrf_for, get_current_user, hash_password, require_admin, token_hash, verify_password
+from app.service_desk import router as service_desk_router
 
 app = FastAPI(title="Catálogo de Servicios", version="1.0.0")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.include_router(service_desk_router)
 
 ORG = {
     "empresas": (Empresa, None, None),
@@ -157,6 +159,8 @@ def update_user(item_id: int, payload: UserUpdate, admin: Usuario = Depends(requ
     password = data.pop("password", None)
     if password: item.password_hash = hash_password(password)
     if "login" in data: data["login"] = data["login"].strip().lower()
+    if data.get("activo") is False and db.scalar(select(Ticket.id).where(Ticket.responsable_id == item.id, Ticket.estado != "cerrado", Ticket.activo.is_(True))):
+        raise HTTPException(409, "No se puede desactivar: tiene tickets activos asignados")
     for key, value in data.items(): setattr(item, key, value)
     if data.get("activo") is False:
         for session in item.sesiones:

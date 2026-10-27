@@ -37,6 +37,11 @@
       <div class="shell">
         <nav id="nav">
           <button data-view="services">Servicios</button
+          ><button data-view="tickets">Tickets</button
+          ><button data-view="cmdb">CMDB</button
+          ><button data-view="dashboard">Tablero</button
+          ><button data-view="knowledge">Autoservicio</button
+          ><button data-view="queues" class="admin">Colas</button
           ><button data-view="org" class="admin">Organización</button
           ><button data-view="users" class="admin">Usuarios</button
           ><button data-view="catalogs" class="admin">Catálogos</button
@@ -162,7 +167,7 @@
           );
         $("#content").innerHTML = '<div class="card"><p>Cargando…</p></div>';
         try {
-          await (({ services, org, users, catalogs, imports })[view] || services)();
+          await (({ services, tickets, cmdb, dashboard, knowledge, queues, org, users, catalogs, imports })[view] || services)();
         } catch (error) {
           message(error.message || "No fue posible cargar la sección");
           $("#content").innerHTML = '<div class="card"><p>No fue posible cargar los datos.</p></div>';
@@ -548,6 +553,42 @@
         $("#catkind").onchange = render;
         render();
       }
+      async function tickets() {
+        const [data, servicesData, queuesData, config] = await Promise.all([
+          api("/api/tickets?size=30"), api("/api/servicios?size=100"), api("/api/colas"), api("/api/service-desk/configuracion")
+        ]);
+        const opts=(items,label)=>(items||[]).map(x=>`<option value="${x.id}">${esc(x[label]||x.nombre)}</option>`).join("");
+        $("#content").innerHTML=`<div class="card"><h2>Service Desk</h2><p>Portal del solicitante y consola de agente. El orden es prioridad y antigüedad.</p>
+        <form id="ticketForm" class="grid"><div><label>Título</label><input name="titulo" required minlength="3"></div><div><label>Descripción</label><textarea name="descripcion" required></textarea></div>
+        <div><label>Proceso</label><select name="proceso" id="ticketProcess">${Object.keys(config.procesos).map(x=>`<option>${x}</option>`).join("")}</select></div>
+        <div><label>Cola</label><select name="cola_id" id="ticketQueue">${opts(queuesData,"nombre")}</select></div><div><label>Servicio</label><select name="servicio_id">${opts(servicesData.items,"codigo")}</select></div>
+        <div><label>Prioridad</label><select name="prioridad"><option>baja</option><option selected>media</option><option>alta</option><option>critica</option></select></div>
+        <div><label>Impacto</label><select name="impacto"><option>bajo</option><option selected>medio</option><option>alto</option></select></div><div><label>Urgencia</label><select name="urgencia"><option>baja</option><option selected>media</option><option>alta</option></select></div>
+        <div id="processFields"></div><div><label>Justificación si no aplica CI</label><input name="sin_ci_justificacion" value="Trámite sin CI identificado" required></div><div class="actions"><button>Crear ticket</button></div></form></div>
+        <div class="card"><h2>Tickets visibles</h2><p>${data.total} resultados</p><table><thead><tr><th>Número</th><th>Título</th><th>Proceso</th><th>Cola</th><th>Estado</th><th>Prioridad</th><th></th></tr></thead><tbody>${data.items.map(x=>`<tr><td>${esc(x.numero)}</td><td>${esc(x.titulo)}</td><td>${esc(x.proceso)}</td><td>${esc(x.cola)}</td><td><span class="badge">${esc(x.estado)}</span></td><td>${esc(x.prioridad)}</td><td><button class="secondary ticketDetail" data-id="${x.id}">Ver</button></td></tr>`).join("")}</tbody></table></div>`;
+        const processFields=()=>{const p=$("#ticketProcess").value;$("#processFields").innerHTML=p==="eventos"?`<label for="eventCategory">Categoría del evento</label><select id="eventCategory" name="categoria" required><option value="E0">E0 · Programado</option><option value="E1">E1 · No programado sin impacto</option><option value="E2" selected>E2 · No programado con impacto</option><option value="E3">E3 · Seguridad de la información</option></select><label for="eventEvaluation">Evaluación inicial</label><input id="eventEvaluation" name="evaluacion" value="Evento detectado y pendiente de evaluación" required>`:p==="incidentes"?`<label for="incidentCategory">Categoría del incidente</label><select id="incidentCategory" name="categoria" required>${[0,1,2,3,4,5,6].map(i=>`<option value="I${i}">I${i}</option>`).join("")}</select><label for="incidentRedundancy">Redundancia</label><select id="incidentRedundancy" name="redundancia"><option>por_evaluar</option><option>disponible</option><option>no_disponible</option></select>`:""};
+        const filterQueues=()=>{$("#ticketQueue").innerHTML=opts(queuesData.filter(x=>x.proceso===$("#ticketProcess").value),"nombre");processFields()};
+        $("#ticketProcess").onchange=filterQueues; filterQueues();
+        $("#ticketForm").onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target));d.cola_id=+d.cola_id;d.servicio_id=+d.servicio_id;d.tipo=config.tipos_por_proceso[d.proceso];d.datos_proceso={};if(d.categoria){d.datos_proceso.categoria=d.categoria;delete d.categoria}if(d.evaluacion){d.datos_proceso.evaluacion=d.evaluacion;delete d.evaluacion}if(d.redundancia){d.datos_proceso.redundancia=d.redundancia;d.datos_proceso.interrupcion=true;d.datos_proceso.justificacion_categoria="Clasificación manual desde el portal";delete d.redundancia}try{await api("/api/tickets",{method:"POST",body:JSON.stringify(d)});message("Ticket creado",true);tickets()}catch(x){message(x.message)}};
+        document.querySelectorAll(".ticketDetail").forEach(b=>b.onclick=()=>ticketDetail(+b.dataset.id));
+      }
+      async function ticketDetail(id) {
+        const x=await api(`/api/tickets/${id}`), config=await api("/api/service-desk/configuracion");
+        const flow=config.procesos[x.proceso]||[], next=flow[flow.indexOf(x.estado)+1];
+        const processData=Object.entries(x.datos_proceso||{}).map(([k,v])=>`<p><b>${esc(k.replaceAll("_"," "))}:</b> ${esc(v)}</p>`).join("");
+        const relationsData=(x.relaciones||[]).map(r=>`<p><b>${esc(r.tipo.replaceAll("_"," "))}:</b> ticket #${esc(r.ticket_id===x.id?r.relacionado_id:r.ticket_id)}</p>`).join("");
+        $("#content").innerHTML=`<div class="card"><h2>${esc(x.numero)} · ${esc(x.titulo)}</h2><div class="grid"><p><b>Proceso:</b> ${esc(x.proceso)}</p><p><b>Estado:</b> ${esc(x.estado)}</p><p><b>Servicio:</b> ${esc(x.servicio)}</p><p><b>Cola:</b> ${esc(x.cola)}</p><p><b>Responsable:</b> ${esc(x.responsable_id||"Sin asignar")}</p><p><b>CI:</b> ${esc(x.ci_ids.join(", ")||"Justificado sin CI")}</p>${processData}${relationsData}</div><p>${esc(x.descripcion)}</p><div class="actions"><button id="backTickets">Volver</button><button id="claimTicket">Tomar</button>${next?`<button id="nextTicket">Avanzar a ${esc(next)}</button>`:""}</div></div><div class="card"><h3>Bitácora inmutable</h3><table>${x.historial.map(h=>`<tr><td>${esc(h.creado_en)}</td><td>${esc(h.accion)}</td><td>${esc(h.actor_id)}</td><td>${esc(h.motivo||"")}</td></tr>`).join("")}</table></div>`;
+        $("#backTickets").onclick=tickets; $("#claimTicket").onclick=async()=>{try{await api(`/api/tickets/${id}/tomar`,{method:"POST"});ticketDetail(id)}catch(e){message(e.message)}};
+        if($("#nextTicket"))$("#nextTicket").onclick=async()=>{let datos={};if(x.proceso==="incidentes"&&next==="clasificacion")datos={categoria:"I1",interrupcion:true,redundancia:"por_evaluar",justificacion_categoria:"Clasificación manual"};if(x.proceso==="cambios"&&next==="evaluacion")datos={impacto:"medio",riesgo:"medio",plan_pruebas:"Pendiente de ejecutar",plan_reversion:"Restaurar versión anterior"};try{await api(`/api/tickets/${id}/transiciones`,{method:"POST",body:JSON.stringify({estado:next,datos})});ticketDetail(id)}catch(e){message(e.message)}};
+      }
+      async function cmdb() {
+        const data=await api(`/api/cmdb/dispositivos?size=50&${state.cmdbQuery||""}`),classes=await api("/api/cmdb/clasificaciones");
+        $("#content").innerHTML=`<div class="card"><h2>CMDB</h2><form id="cmdbFilter" class="grid"><div><label>Etiqueta, nombre o serie</label><input name="q"></div><div><label>Clasificación</label><select name="clasificacion_id"><option value="">Todas</option>${classes.map(x=>`<option value="${x.id}">${esc(x.nombre)}</option>`).join("")}</select></div><div class="actions"><button>Buscar</button></div></form><p>${data.total} dispositivos persistidos</p><table><thead><tr><th>Etiqueta</th><th>Nombre</th><th>Clase</th><th>Estado</th><th>Ubicación</th></tr></thead><tbody>${data.items.map(x=>`<tr><td>${esc(x.etiqueta)}</td><td>${esc(x.nombre)}</td><td>${esc(x.clasificacion)}</td><td>${esc(x.estado)}</td><td>${esc(x.ubicacion)}</td></tr>`).join("")}</tbody></table></div>`;
+        $("#cmdbFilter").onsubmit=e=>{e.preventDefault();state.cmdbQuery=new URLSearchParams(new FormData(e.target)).toString();cmdb()};
+      }
+      async function dashboard(){const x=await api("/api/tablero");const cards=(o)=>Object.entries(o).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("");$("#content").innerHTML=`<div class="card"><h2>Indicadores de atención</h2><p>${esc(x.metodo)}</p><div class="grid"><div><h3>Por proceso</h3><table>${cards(x.por_proceso)}</table></div><div><h3>Por prioridad</h3><table>${cards(x.por_prioridad)}</table></div><div><h3>Por estado</h3><table>${cards(x.por_estado)}</table></div><div><h3>Tiempos</h3><p>Primera atención: ${esc(x.primera_atencion_promedio_min??"—")} min</p><p>Resolución: ${esc(x.resolucion_promedio_min??"—")} min</p></div></div></div>`}
+      async function knowledge(){const rows=await api("/api/conocimiento");$("#content").innerHTML=`<div class="card"><h2>Autoservicio · Nivel 0</h2>${rows.map(x=>`<article><h3>${esc(x.titulo)}</h3><p>${esc(x.contenido)}</p><small>${esc(x.etiquetas)}</small></article>`).join("")}</div>`}
+      async function queues(){const rows=await api("/api/colas?include_inactive=true"),config=await api("/api/service-desk/configuracion");$("#content").innerHTML=`<div class="card"><h2>Colas</h2><form id="queueForm" class="grid"><div><label>Código</label><input name="codigo" required></div><div><label>Nombre</label><input name="nombre" required></div><div><label>Proceso</label><select name="proceso">${Object.keys(config.procesos).map(x=>`<option>${x}</option>`).join("")}</select></div><div><label>Nivel 0–4</label><input name="nivel_soporte" type="number" min="0" max="4" value="1"></div><div class="actions"><button>Crear</button></div></form><table><thead><tr><th>Código</th><th>Nombre</th><th>Proceso</th><th>Nivel</th><th>Objetivos (min)</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.codigo)}</td><td>${esc(x.nombre)}</td><td>${esc(x.proceso)}</td><td>${x.nivel_soporte}</td><td>${x.objetivo_primera_min}/${x.objetivo_resolucion_min}</td></tr>`).join("")}</tbody></table></div>`;$("#queueForm").onsubmit=async e=>{e.preventDefault();let d=Object.fromEntries(new FormData(e.target));d.nivel_soporte=+d.nivel_soporte;try{await api("/api/colas",{method:"POST",body:JSON.stringify(d)});queues()}catch(x){message(x.message)}}}
       async function imports() {
         let lots = await api("/api/importaciones");
         $("#content").innerHTML =
