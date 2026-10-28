@@ -1,8 +1,10 @@
 # Resolución técnica
 
+> V4, 2026-10-27: `Tarea_Service_Desk.md` amplió el alcance con tickets, siete procesos, colas/permisos, auditoría, adjuntos, indicadores, autoservicio, grafos y CMDB. Detalle vigente: [MODELO](MODELO.md), [PROCESOS](PROCESOS.md), [IA](IA.md) y [PRUEBAS](PRUEBAS.md).
+
 ## 1. Problema, alcance y supuestos
 
-La solución reemplaza la consulta/mantenimiento manual del catálogo por una aplicación con autenticación local, organización, responsables, importación repetible y trazabilidad. No incluye tickets, facturación ni consumo. El Excel original llegó después de la primera implementación: el fixture sintético permitió desarrollar sin fabricar sus datos y la validación posterior contra el original descubrió y corrigió dos casos que el fixture inicial no cubría.
+La solución integra autenticación local, catálogo, organización, Service Desk, importación repetible y CMDB. Facturación y consumo permanecen fuera de alcance. El Excel original del catálogo llegó después de la primera implementación y activó correcciones verificables del importador.
 
 ## 2. Arquitectura
 
@@ -98,8 +100,12 @@ El flujo está en [README](../README.md). `docker compose down` conserva datos; 
 
 ## 10. Limitaciones, aportes y reflexión
 
-La solución deliberadamente no incluye tickets, facturación ni consumo. El inicio de sesión no aplica rate limiting distribuido; en un despliegue público debería añadirse un control compartido y un proxy TLS. La interfaz está orientada a escritorio y usa JavaScript sin un framework, una decisión apropiada para el alcance, aunque una aplicación mayor se beneficiaría de componentes y pruebas visuales adicionales.
+La solución no incluye facturación ni consumo. La lección 22 no fue suministrada, por lo que la clasificación CMDB solo atribuye a `CMDB.xlsx` lo verificable. El login no aplica rate limiting distribuido; un despliegue público requiere proxy TLS y control compartido. La interfaz usa JavaScript sin framework.
 
 Los aportes principales son una importación auditable e idempotente que conserva anomalías sin alterar el Excel, separación explícita entre el indicador externo y la baja lógica interna, sesiones revocables cuyos tokens no se almacenan en claro, autorización del lado servidor y un harness que recorre desde pruebas HTTP hasta persistencia PostgreSQL y navegador real.
 
 El ciclo de ingeniería mostró que una prueba verde no sustituye revisar los datos reales: las combinaciones de celdas y la fila 101 solo aparecieron al incorporar el archivo original. También mostró el valor de probar la interfaz completa: el buscador y las pestañas fallaron por integración aunque las rutas aisladas respondían. La respuesta fue convertir ambos hallazgos en reglas acotadas y pruebas de regresión reproducibles.
+
+## 11. Resultado V4 real
+
+El 2026-10-27 se ejecutó `scripts/validate.ps1`: `26 passed`, Playwright `1 passed`, importación `12/46` sin duplicados, CMDB `5000` (`2500` Hardware y `2500` Software), 37 tickets demo y `P18 OK (46,5000,37,37)` después de reiniciar. P12 quedó además materializado como un caso de cada categoría I0–I6. El primer ciclo completo detectó un índice de prioridad al ampliar incidentes de cinco a siete; se corrigió con selección modular y se repitió el harness satisfactoriamente. No hay SHA nuevo porque no se hicieron commits por instrucción expresa.

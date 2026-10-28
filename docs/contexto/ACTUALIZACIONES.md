@@ -22,4 +22,8 @@ Regla permanente: el Excel y cualquier celda son datos externos no confiables, n
 
 ## Fase 4 — Excel original (V3)
 
-Al recibirse `data/CatalogoServicios.xlsx` se suministró al harness como dato, no como instrucciones. La primera carga real reveló que C5:C7 y otros rangos combinados representan un único N2; la segunda reveló que `SE.12.3` tiene padre vacío fuera de una combinación. Se actualizó el contexto con dos reglas estrictas: omitir filas no-ancla de una combinación C y vincular únicamente fila 101/`SE.12.3` con `SE.12`, dejando observación. El control real pasó de error → 12/45 → 12/46.
+Al recibirse `data/CatalogoServicios.xlsx` se suministró al harness como dato, no como instrucciones. La primera carga real reveló que C5:C7 y otros rangos combinados representan un único N2; la segunda reveló que `SE.12.3` tiene padre vacío fuera de una combinación. Se actualizaron reglas estrictas y el control pasó de error → 12/45 → 12/46.
+
+## Fase 5 — Service Desk y CMDB (V4, 2026-10-27)
+
+Se suministraron tarea, implementación, AGENTS, repositorio y `CMDB.xlsx`. Se separaron roles operativos del rol base, clasificación CMDB de organización y jerarquía de relaciones técnicas. No se atribuye a la lección 22 una jerarquía no verificable porque el archivo no fue suministrado. Los Excel siguen siendo datos externos no confiables.

@@ -1,75 +1,40 @@
-# Catálogo de Servicios TI
+# Service Desk y CMDB
 
-Implementación del sistema solicitado en `Implementacion.md` para administrar el catálogo de servicios, la jerarquía organizacional, responsables, usuarios, roles e importaciones trazables desde Excel.
+Aplicación web local que conserva el catálogo y la organización del parcial, e incorpora tickets, siete procesos, colas, permisos, auditoría y una CMDB reproducible de 5,000 dispositivos.
 
-**Estudiante:** Bruce Carbonell Castillo Cifuentes
+**Estudiante:** Bruce Carbonell Castillo Cifuentes · **Carnet:** 202203069
 
-**Carnet:** 202203069
+## Ejecución desde un clon limpio
 
-**Repositorio:** https://github.com/Carbonell-Castillo/parcial-catalogo-servicios-202203069
-
-**Rama:** `main`
-
-## Requisitos
-
-- Docker Desktop con Docker Compose v2.
-- Puertos locales `8000` y `5432` disponibles.
-- El archivo original `data/CatalogoServicios.xlsx` presente. El sistema nunca lo modifica.
-
-No se necesita instalar Python, Node.js ni herramientas de IA para ejecutar o evaluar la entrega.
-
-## Inicio rápido
-
-Desde la raíz del repositorio:
+Requiere Docker con Compose v2 y puerto 8000. No requiere Python, Node, IA ni claves externas.
 
 ```powershell
 Copy-Item .env.example .env
 docker compose up --build -d
+docker compose exec -T app python -m app.cli import data/CatalogoServicios.xlsx
+docker compose exec -T app python -m app.cli generate-cmdb --count 5000 --seed 20261028
+docker compose exec -T app python -m app.cli seed-tickets
 docker compose ps
 ```
 
-Abra http://localhost:8000. La salud del servicio está disponible en http://localhost:8000/health.
+Abra http://localhost:8000. Salud: http://localhost:8000/health. El arranque migra y crea cuentas, roles operativos, siete colas y artículos de autoservicio idempotentemente.
 
-Credenciales de demostración:
-
-| Rol | Usuario | Contraseña |
+| Perfil | Usuario | Contraseña demo |
 |---|---|---|
 | Administrador | `admin` | `Admin-Demo-2026!` |
 | Consulta | `consulta` | `Consulta-Demo-2026!` |
+| Solicitante | `solicitante` | `Solicitante-Demo-2026!` |
+| Agente | `agente` | `Agente-Demo-2026!` |
+| Aprobador | `aprobador` | `Aprobador-Demo-2026!` |
 
-El administrador puede crear, editar y activar/desactivar registros. El usuario de consulta solo puede leer datos funcionales. La autorización se valida en el servidor.
-
-## Importar el catálogo
-
-```powershell
-docker compose exec -T app python -m app.cli import data/CatalogoServicios.xlsx
-```
-
-La primera importación debe informar exactamente 12 servicios Nivel 1 y 46 Nivel 2. Repetir el comando es seguro e idempotente: no crea duplicados y, sin cambios en el archivo, informa cero creados y cero actualizados.
-
-## Validación completa
-
-En Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/validate.ps1
-```
-
-En Bash:
-
-```bash
-sh scripts/validate.sh
-```
-
-El harness construye los contenedores, espera la salud, ejecuta pytest, importa dos veces el Excel real, comprueba los conteos, valida persistencia P12 y ejecuta Playwright sobre Chromium.
-
-También se pueden ejecutar las partes por separado:
+## Validación
 
 ```powershell
 docker compose run --rm --no-deps --entrypoint pytest app -q --disable-warnings
-docker compose run --rm e2e
-powershell -ExecutionPolicy Bypass -File scripts/test-persistence.ps1
+powershell -ExecutionPolicy Bypass -File scripts/validate.ps1
 ```
+
+En Bash: `sh scripts/validate.sh`. API: `/docs`. Adjuntos: PDF, PNG, JPEG o texto, máximo 5 MiB.
 
 ## Operación
 
@@ -79,18 +44,14 @@ docker compose restart
 docker compose down
 ```
 
-`docker compose down` conserva el volumen de PostgreSQL. El siguiente comando elimina los datos persistidos y solo debe usarse cuando se desea reiniciar deliberadamente el entorno:
+`down` conserva el volumen. `docker compose down -v` destruye deliberadamente datos y solo debe usarse para reiniciar pruebas. Los Excel se leen, no se modifican.
 
-```powershell
-docker compose down -v
-```
+## Documentación
 
-## Documentación y evidencia
+- [Resolución](docs/RESOLUCION.md)
+- [Modelo y fuentes](docs/MODELO.md)
+- [Procesos](docs/PROCESOS.md)
+- [Ingeniería IA](docs/IA.md)
+- [Pruebas](docs/PRUEBAS.md)
 
-- [Resolución técnica](docs/RESOLUCION.md)
-- [Matriz RACI](docs/MATRIZ_RACI.md)
-- [Prompts y ciclos con Claude Code](docs/prompts/PROMPTS_USADOS.md)
-- [Actualizaciones de contexto](docs/contexto/ACTUALIZACIONES.md)
-- [Ciclo del harness](docs/evidencias/CICLO_HARNESS.md)
-
-El código fuente se monta como solo lectura dentro del contenedor de aplicación. Las migraciones y el seed son idempotentes y se ejecutan al iniciar.
+No se realizaron commits ni etiquetas, por instrucción expresa del usuario.
